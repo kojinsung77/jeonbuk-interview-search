@@ -2,7 +2,7 @@ const $ = (id) => document.getElementById(id);
 const enc = new TextEncoder(), dec = new TextDecoder();
 const state = { cases: [], results: [], key: null, selected: null, mode: 'case', favoritesOnly: false,
   favorites: new Set(), query: '', filters: { year: '', group: '', univ: '', form: '' }, limit: 60,
-  pdf: null, loadingTask: null, blob: null, page: 1, zoom: 1, generation: 0, renderSerial: 0, renderTask: null, tab: 'pdf' };
+  pdf: null, loadingTask: null, blob: null, page: 1, zoom: 1, generation: 0, renderSerial: 0, renderTask: null, tab: 'info', openAnswers: new Set() };
 let meta, pdfModule, toastTimer, resizeTimer;
 const escape = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm = (text) => String(text ?? '').normalize('NFKC').toLocaleLowerCase('ko');
@@ -22,7 +22,7 @@ function highlighted(text) {
 }
 function snippet(c, question) {
   const ts = terms();
-  const candidates = question ? [questionText(question)] : c.questions.flatMap(q => [q.q,q.a,...(q.followups||[]).flatMap(f=>[f.q,f.a])]);
+  const candidates = question ? [question.q,...(question.followups||[]).map(f=>f.q),question.a,...(question.followups||[]).map(f=>f.a)] : c.questions.flatMap(q => [q.q,q.a,...(q.followups||[]).flatMap(f=>[f.q,f.a])]);
   candidates.push(c.etc || '',c.intro_note || '',textOf(c.interview));
   const text = candidates.find(t => ts.length && ts.some(term=>norm(t).includes(term))) || candidates.find(Boolean) || '';
   let start = 0;
@@ -152,10 +152,43 @@ function switchTab(tab,focus=false) {
   if(focus)$(pdf?'pdf-tab':'info-tab').focus();
   if(pdf&&state.pdf)renderPage();
 }
+function answerMarkup(answer, id, label) {
+  if(!String(answer || '').trim())return '';
+  const open=state.openAnswers.has(id);
+  const action=open?'답변 숨기기':'답변 보기';
+  return `<button type="button" class="answer-toggle" data-answer-toggle="${id}" data-answer-label="${escape(label)}" aria-expanded="${open}" aria-controls="${id}" aria-label="${escape(label+' '+action)}">${action}</button><p class="answer" id="${id}"${open?'':' hidden'}><span class="answer-label">응답 사례</span>${highlighted(answer)}</p>`;
+}
+function updateAllAnswersButton() {
+  const button=$('toggle-all-answers');if(!button)return;
+  const toggles=[...$('info-panel').querySelectorAll('[data-answer-toggle]')];
+  const allOpen=toggles.length>0&&toggles.every(b=>b.getAttribute('aria-expanded')==='true');
+  button.textContent=allOpen?'답변 모두 숨기기':'답변 모두 보기';
+}
+function setAnswerVisibility(button, open) {
+  const id=button.dataset.answerToggle;
+  open?state.openAnswers.add(id):state.openAnswers.delete(id);
+  $(id).hidden=!open;
+  button.setAttribute('aria-expanded',open);
+  button.textContent=open?'답변 숨기기':'답변 보기';
+  button.setAttribute('aria-label',button.dataset.answerLabel+' '+button.textContent);
+}
+$('info-panel').addEventListener('click',event=>{
+  const toggle=event.target.closest('[data-answer-toggle]');
+  if(toggle)setAnswerVisibility(toggle,toggle.getAttribute('aria-expanded')!=='true');
+  else if(event.target.closest('#toggle-all-answers')) {
+    const toggles=[...$('info-panel').querySelectorAll('[data-answer-toggle]')];
+    const open=!toggles.every(b=>b.getAttribute('aria-expanded')==='true');
+    toggles.forEach(b=>setAnswerVisibility(b,open));
+  } else return;
+  updateAllAnswersButton();
+});
 function renderInfo() {
   const c=state.selected;if(!c)return;
   const rows=[['면접 형식',(c.interview.form||[]).join(' · ')],['면접 방식',(c.interview.mode||[]).join(' · ')],['반영 비율',c.interview.ratio],['면접 시간',c.interview.time],['진행 방법',c.interview.method],['원본 쪽수',c.pages.src?.length?c.pages.src.join('–')+'쪽 (계열 PDF)':''],['책 쪽수',c.pages.book?.length?c.pages.book.join('–')+'쪽':'']];
-  $('info-panel').innerHTML=`<h3>면접 정보</h3><dl class="info-grid">${rows.filter(([k,v])=>v).map(([k,v])=>`<dt>${k}</dt><dd>${highlighted(v)}</dd>`).join('')}</dl>${!c.indexed?'<div class="notice">아직 문항이 정리되지 않은 사례입니다. 질문과 면접 정보는 원본 PDF에서 확인해 주세요.</div>':`${c.intro_note?`<h3>면접 시작 전</h3><p class="etc">${highlighted(c.intro_note)}</p>`:''}<h3>면접 질문 <span class="muted">${c.questions.length}개</span></h3><p class="notice">아래 답변은 학생이 기억한 면접 당시의 응답입니다. 정답이나 모범답안으로 제시하는 내용이 아닙니다.</p>${c.questions.map((q,i)=>`<section class="question" id="question-${i}"><h4><span>Q${q.no||i+1}</span>${highlighted(q.q)}</h4>${q.a?`<p class="answer"><span class="answer-label">응답 사례</span>${highlighted(q.a)}</p>`:''}${(q.followups||[]).map(f=>`<div class="followup"><p><span class="answer-label">꼬리질문</span>${highlighted(f.q)}</p>${f.a?`<p class="answer"><span class="answer-label">응답 사례</span>${highlighted(f.a)}</p>`:''}</div>`).join('')}</section>`).join('')}${c.etc?`<h3>기타 면접정보</h3><p class="etc">${highlighted(c.etc)}</p>`:''}`}`;
+  const hasAnswers=c.questions.some(q=>String(q.a||'').trim()||(q.followups||[]).some(f=>String(f.a||'').trim()));
+  const answerNote=hasAnswers?'답변은 ‘답변 보기’를 눌러 확인할 수 있습니다. 학생이 기억한 당시의 응답이며, 정답이나 모범답안이 아닙니다.':'이 사례에는 정리된 답변이 없습니다. 질문과 원본 PDF를 함께 확인해 주세요.';
+  $('info-panel').innerHTML=`<h3>면접 정보</h3><dl class="info-grid">${rows.filter(([k,v])=>v).map(([k,v])=>`<dt>${k}</dt><dd>${highlighted(v)}</dd>`).join('')}</dl>${!c.indexed?'<div class="notice">아직 문항이 정리되지 않은 사례입니다. 질문과 면접 정보는 원본 PDF에서 확인해 주세요.</div>':`${c.intro_note?`<h3>면접 시작 전</h3><p class="etc">${highlighted(c.intro_note)}</p>`:''}<div class="questions-heading"><h3>면접 질문 <span class="muted">${c.questions.length}개</span></h3>${hasAnswers?'<button type="button" id="toggle-all-answers" class="answer-toggle">답변 모두 보기</button>':''}</div><p class="notice">답변은 ‘답변 보기’를 눌러 확인할 수 있습니다. 학생이 기억한 당시의 응답이며, 정답이나 모범답안이 아닙니다.</p>${c.questions.map((q,i)=>`<section class="question" id="question-${i}"><h4><span>Q${escape(q.no||i+1)}</span>${highlighted(q.q)}</h4>${answerMarkup(q.a,`answer-${i}`,`Q${q.no||i+1}`)}${(q.followups||[]).map((f,j)=>`<div class="followup"><p><span class="answer-label">꼬리질문</span>${highlighted(f.q)}</p>${answerMarkup(f.a,`answer-${i}-followup-${j}`,`Q${q.no||i+1} 꼬리질문 ${j+1}`)}</div>`).join('')}</section>`).join('')}${c.etc?`<h3>기타 면접정보</h3><p class="etc">${highlighted(c.etc)}</p>`:''}`}`;
+  updateAllAnswersButton();
 }
 function resetPdf() {
   state.renderSerial++;state.renderTask?.cancel();state.renderTask=null;
@@ -168,12 +201,13 @@ function resetPdf() {
 }
 async function selectCase(id,questionIndex) {
   const c=state.cases.find(c=>c.id===id);if(!c)return;
+  if(state.selected?.id!==id)state.openAnswers.clear();
   const gen=++state.generation;state.selected=c;state.page=1;state.zoom=1;resetPdf();
   $('detail-empty').hidden=true;$('detail').hidden=false;document.body.classList.add('detail-open');
   $('detail-kicker').textContent=`${c.year} · ${c.group}`;
   $('detail-title').innerHTML=highlighted(`${c.univ} · ${c.dept}`);
   $('detail-subtitle').innerHTML=highlighted(c.admission)+` <span class="muted">· 원본 ${c.page_count}쪽</span>`;
-  renderInfo();switchTab(questionIndex!==undefined?'info':'pdf');renderResults();updateFavorite();updateNavigation();syncHash();
+  renderInfo();switchTab('info');renderResults();updateFavorite();updateNavigation();syncHash();
   $('detail-pane').scrollTop=0;
   if(questionIndex!==undefined)$('question-'+questionIndex)?.scrollIntoView({block:'start'});
   try {
@@ -219,7 +253,7 @@ $('zoom-in').onclick=()=>{state.zoom=Math.min(3,state.zoom+.25);renderPage();};$
 $('pdf-open').onclick=()=>{if(state.blob)window.open(state.blob+'#page='+state.page,'_blank','noopener,noreferrer');};
 $('pdf-download').onclick=()=>{if(!state.blob)return;const a=document.createElement('a');a.href=state.blob;a.download=`${state.selected.year}_${state.selected.univ}_${state.selected.dept}_${state.selected.admission}.pdf`;a.click();};
 $('pdf-tab').onclick=()=>switchTab('pdf');$('info-tab').onclick=()=>switchTab('info');
-for(const id of ['pdf-tab','info-tab'])$(id).addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();switchTab(e.key==='Home'?'pdf':e.key==='End'?'info':state.tab==='pdf'?'info':'pdf',true);}});
+for(const id of ['info-tab','pdf-tab'])$(id).addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();switchTab(e.key==='Home'?'info':e.key==='End'?'pdf':state.tab==='pdf'?'info':'pdf',true);}});
 $('previous-case').onclick=()=>moveCase(-1);$('next-case').onclick=()=>moveCase(1);$('detail-favorite').onclick=()=>state.selected&&toggleFavorite(state.selected.id);
 $('back-list').onclick=()=>document.body.classList.remove('detail-open');
 $('share').onclick=async()=>{syncHash();try{await navigator.clipboard.writeText(location.href);toast('현재 사례와 검색 조건의 링크를 복사했습니다.');}catch{toast('주소 표시줄의 링크를 복사해 주세요.');}};
