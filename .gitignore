@@ -1,0 +1,12 @@
+.build-cache.json
+.build-cache.*
+.env*
+__pycache__/
+*.pyc
+*.pdf
+*.xlsx
+*.zip
+*.log
+private/
+tmp/
+
