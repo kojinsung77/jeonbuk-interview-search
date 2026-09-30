@@ -21,7 +21,12 @@ try {
     }
     git @repoConfig push $Remote HEAD
     if ($LASTEXITCODE -ne 0) { throw '소스 업로드 실패' }
-    $pagesCommit = git @repoConfig subtree split --prefix=public
+    git @repoConfig fetch $Remote gh-pages
+    if ($LASTEXITCODE -ne 0) { throw '기존 Pages 브랜치 확인 실패' }
+    $publicTree = git @repoConfig rev-parse HEAD:public
+    if ($LASTEXITCODE -ne 0) { throw '배포 폴더 확인 실패' }
+    $pagesParent = git @repoConfig rev-parse FETCH_HEAD
+    $pagesCommit = git @repoConfig commit-tree $publicTree.Trim() -p $pagesParent.Trim() -m 'Publish encrypted interview library'
     if ($LASTEXITCODE -ne 0) { throw 'Pages 배포 준비 실패' }
     $pagesRef = $pagesCommit.Trim() + ':refs/heads/gh-pages'
     git @repoConfig push $Remote $pagesRef
