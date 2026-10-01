@@ -184,7 +184,10 @@ $('info-panel').addEventListener('click',event=>{
 });
 function renderInfo() {
   const c=state.selected;if(!c)return;
-  const rows=[['면접 형식',(c.interview.form||[]).join(' · ')],['면접 방식',(c.interview.mode||[]).join(' · ')],['반영 비율',c.interview.ratio],['면접 시간',c.interview.time],['진행 방법',c.interview.method],['원본 쪽수',c.pages.src?.length?c.pages.src.join('–')+'쪽 (계열 PDF)':''],['책 쪽수',c.pages.book?.length?c.pages.book.join('–')+'쪽':'']];
+  const book=c.pages?.book||[];
+  const bookRange=book.length?String(book[0])+(String(book[book.length-1])!==String(book[0])?'~'+book[book.length-1]:''):'';
+  const source=bookRange?`책자 ${c.pages.vol?c.pages.vol+' ':''}${bookRange}쪽`:'';
+  const rows=[['면접 형식',(c.interview.form||[]).join(' · ')],['면접 방식',(c.interview.mode||[]).join(' · ')],['반영 비율',c.interview.ratio],['면접 시간',c.interview.time],['진행 방법',c.interview.method],['원본',source]];
   const hasAnswers=c.questions.some(q=>String(q.a||'').trim()||(q.followups||[]).some(f=>String(f.a||'').trim()));
   const answerNote=hasAnswers?'답변은 ‘답변 보기’를 눌러 확인할 수 있습니다. 학생이 기억한 당시의 응답이며, 정답이나 모범답안이 아닙니다.':'이 사례에는 정리된 답변이 없습니다. 질문과 원본 PDF를 함께 확인해 주세요.';
   $('info-panel').innerHTML=`<h3>면접 정보</h3><dl class="info-grid">${rows.filter(([k,v])=>v).map(([k,v])=>`<dt>${k}</dt><dd>${highlighted(v)}</dd>`).join('')}</dl>${!c.indexed?'<div class="notice">아직 문항이 정리되지 않은 사례입니다. 질문과 면접 정보는 원본 PDF에서 확인해 주세요.</div>':`${c.intro_note?`<h3>면접 시작 전</h3><p class="etc">${highlighted(c.intro_note)}</p>`:''}<div class="questions-heading"><h3>면접 질문 <span class="muted">${c.questions.length}개</span></h3>${hasAnswers?'<button type="button" id="toggle-all-answers" class="answer-toggle">답변 모두 보기</button>':''}</div><p class="notice">${answerNote}</p>${c.questions.map((q,i)=>`<section class="question" id="question-${i}"><h4><span>Q${escape(q.no||i+1)}</span>${highlighted(q.q)}</h4>${answerMarkup(q.a,`answer-${i}`,`Q${q.no||i+1}`)}${(q.followups||[]).map((f,j)=>`<div class="followup"><p><span class="answer-label">꼬리질문</span>${highlighted(f.q)}</p>${answerMarkup(f.a,`answer-${i}-followup-${j}`,`Q${q.no||i+1} 꼬리질문 ${j+1}`)}</div>`).join('')}</section>`).join('')}${c.etc?`<h3>기타 면접정보</h3><p class="etc">${highlighted(c.etc)}</p>`:''}`}`;

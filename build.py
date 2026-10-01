@@ -103,7 +103,7 @@ def load_sources(source, years, cache):
         wb = openpyxl.load_workbook(book, read_only=True, data_only=True)
         rows = iter(wb['전체목록'].values if '전체목록' in wb.sheetnames else wb.active.values)
         headers = [str(x or '').strip() for x in next(rows)]
-        required = {'파일명', '연도', '계열', '대학', '학과', '전형', '원본PDF 쪽', '쪽수'}
+        required = {'파일명', '연도', '계열', '대학', '학과', '전형', '원본PDF 쪽', '책자 쪽', '쪽수'}
         if not required.issubset(headers):
             raise ValueError(f'엑셀 열 누락: {required - set(headers)}')
         groups = Counter()
@@ -120,6 +120,11 @@ def load_sources(source, years, cache):
                 raise ValueError(f'PDF 없음: {name}')
             if int(data['연도']) != year:
                 raise ValueError(f'연도 불일치: {name}')
+            page_count = int(data['쪽수'])
+            book_pages = span(data['책자 쪽'])
+            if not book_pages or book_pages[0] < 1 or book_pages[1] - book_pages[0] + 1 != page_count:
+                raise ValueError(f'책자 쪽수/분할 PDF 쪽수 불일치: {name}')
+            volume = str(data.get('책자 권') or '').strip()
             path = pdfs[name]
             group_slug = path.parent.name.removeprefix('사례별분할_')
             groups[group_slug] += 1
@@ -134,15 +139,29 @@ def load_sources(source, years, cache):
             case = {
                 'id': case_id, 'year': year, 'group': str(data['계열']),
                 'univ': str(data['대학']), 'dept': str(data['학과']),
-                'admission': str(data.get('전형') or ''), 'pages': {'src': span(data['원본PDF 쪽']), 'book': []},
-                'page_count': int(data['쪽수']), 'interview': {}, 'intro_note': '',
+                'admission': str(data.get('전형') or ''),
+                'pages': {'src': span(data['원본PDF 쪽']), 'book': book_pages},
+                'page_count': page_count, 'interview': {}, 'intro_note': '',
                 'questions': [], 'etc': '', 'indexed': bool(detail),
             }
+            if volume:
+                case['pages']['vol'] = volume
             if detail:
                 for field in ['univ', 'dept', 'admission']:
                     if case[field] != detail.get(field):
                         raise ValueError(f'엑셀/JSON 불일치: {name} / {field}')
-                for field in ['pages', 'interview', 'intro_note', 'questions', 'etc']:
+                detail_pages = detail.get('pages', {})
+                if not isinstance(detail_pages, dict):
+                    raise ValueError(f'문항 JSON 쪽수 형식 오류: {name}')
+                if detail_pages.get('book') and span(detail_pages['book']) != book_pages:
+                    raise ValueError(f'엑셀/JSON 책자 쪽수 불일치: {name}')
+                if volume and detail_pages.get('vol') and str(detail_pages['vol']).strip() != volume:
+                    raise ValueError(f'엑셀/JSON 책자 권 불일치: {name}')
+                case['pages'].update(detail_pages)
+                case['pages']['book'] = book_pages
+                if volume:
+                    case['pages']['vol'] = volume
+                for field in ['interview', 'intro_note', 'questions', 'etc']:
                     if field in detail:
                         case[field] = detail[field]
                 used_details.add(source_key)
