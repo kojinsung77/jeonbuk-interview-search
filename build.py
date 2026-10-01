@@ -161,11 +161,12 @@ def main():
     parser.add_argument('--source', type=Path, default=ROOT.parent)
     parser.add_argument('--years', nargs='+', type=int, default=[2026])
     parser.add_argument('--password', nargs='?', const='prompt', default='prompt', help='값을 생략하면 숨김 입력')
+    parser.add_argument('--allow-short-password', action='store_true', help='명시적으로 요청한 8~11자 비밀번호 허용')
     parser.add_argument('--verify', action='store_true', help='암호화된 모든 자료의 무결성 검사')
     args = parser.parse_args()
     password = getpass.getpass('App password: ') if args.password == 'prompt' else args.password
-    if len(password) < 12:
-        raise ValueError('비밀번호는 12자 이상으로 설정해 주세요.')
+    if len(password) < 8 or (len(password) < 12 and not args.allow_short_password):
+        raise ValueError('비밀번호는 12자 이상이어야 합니다. 8~11자를 사용하려면 --allow-short-password를 명시하세요.')
     public = ROOT / 'public'
     meta_path = public / 'data' / 'meta.json'
     cases_path = public / 'data' / 'cases.bin'

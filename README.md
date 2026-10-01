@@ -61,13 +61,15 @@ python build.py --password --verify
 
 `--password` 뒤에 값을 쓰지 않으면 숨김 입력을 받습니다. 실제 비밀번호를 명령문, 저장소, 문서에 적지 마세요. 같은 비밀번호로 빌드하면 변경된 PDF만 암호화하고 전체 검색 목록은 다시 만듭니다. 자료 갱신 후 게시 스크립트를 실행합니다.
 
+12자 미만으로 정한 비밀번호를 계속 사용할 때에는 빌드와 검증 명령에 `--allow-short-password`를 추가하세요. 8자 미만은 허용하지 않습니다.
+
 ## 2024·2025년 추가
 
 해당 연도도 사례별 PDF로 분할한 뒤, 같은 구조의 `사례목록_2024_전체.xlsx`, `사례목록_2025_전체.xlsx`와 선택적인 문항 JSON을 준비합니다. 통합 원본 PDF만으로 자동 분할하거나 문항을 추출하지는 않습니다.
 
 ```powershell
-python build.py --years 2024 2025 2026 --password
-python build.py --password --verify
+python build.py --years 2024 2025 2026 --allow-short-password --password
+python build.py --allow-short-password --password --verify
 ```
 
 새로 만든 연도는 필터에 자동으로 나타납니다. `--years`에는 유지할 모든 연도를 넣으세요. 생략한 연도는 새 배포에서 제외됩니다. 원본 경로가 다른 경우 `--source "자료 폴더"`를 지정합니다. 실제 파일명이 그대로 유지되는 한 사례 ID와 즐겨찾기는 문항 추가나 엑셀 순서 변경에도 유지됩니다.
